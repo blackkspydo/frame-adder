@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frame & Crop Photos and Preview</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+</head>
+<body>
+    <input type="file" id="photos" multiple accept="image/*">
+    <input type="file" id="frame" accept="image/png">
+    <button onclick="applyFrameAndDownload()">Apply Frame & Download ZIP</button>
+
+    <h2>Before</h2>
+    <div id="beforePreview"></div>
+
+    <h2>After</h2>
+    <div id="afterPreview"></div>
+
+    <script>
+        async function applyFrameAndDownload() {
+            const photosInput = document.getElementById('photos');
+            const frameInput = document.getElementById('frame');
+            const beforePreview = document.getElementById('beforePreview');
+            const afterPreview = document.getElementById('afterPreview');
+
+            beforePreview.innerHTML = ''; // Clear previous previews
+            afterPreview.innerHTML = '';
+
+            if (!photosInput.files.length || !frameInput.files[0]) {
+                alert('Please select both photos and a frame.');
+                return;
+            }
+
+            const frame = await loadImage(frameInput.files[0]);
+            const zip = new JSZip();
+
+            for (let i = 0; i < photosInput.files.length; i++) {
+                const photo = await loadImage(photosInput.files[i]);
+                const cropped = getCroppedImage(photo);
+
+                // Display original photo preview
+                const originalImg = document.createElement('img');
+                originalImg.src = photo.src;
+                originalImg.style.maxWidth = '100px'; // Set a max width for preview
+                originalImg.style.maxHeight = '100px';
+                originalImg.alt = 'Original Photo';
+                beforePreview.appendChild(originalImg);
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                // Set canvas size to cropped dimensions
+                canvas.width = cropped.width;
+                canvas.height = cropped.height;
+
+                // Draw cropped photo
+                ctx.drawImage(photo, cropped.sx, cropped.sy, cropped.sWidth, cropped.sHeight, 0, 0, cropped.width, cropped.height);
+
+                // Draw frame resized to cropped dimensions
+                ctx.drawImage(frame, 0, 0, cropped.width, cropped.height);
+
+                // Display framed photo preview
+                const framedImg = document.createElement('img');
+                framedImg.src = canvas.toDataURL();
+                framedImg.style.maxWidth = '100px'; // Set a max width for preview
+                framedImg.style.maxHeight = '100px';
+                framedImg.alt = 'Framed Photo';
+                afterPreview.appendChild(framedImg);
+
+                // Convert canvas to Blob and add to ZIP
+                const blob = await new Promise(resolve => canvas.toBlob(resolve));
+                zip.file(`framed_cropped_photo_${i + 1}.png`, blob);
+            }
+
+            // Generate ZIP and trigger download
+            zip.generateAsync({type: 'blob'}).then(function(content) {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(content);
+                a.download = 'framed_cropped_photos.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+        }
+
+        function getCroppedImage(img) {
+            const targetAspectRatio = 1;
+            let { width, height } = img;
+
+            let newWidth, newHeight;
+
+            // Calculate crop size based on the target aspect ratio
+            if (width / height > targetAspectRatio) {
+                // Image is wider than target aspect ratio
+                newHeight = height;
+                newWidth = height * targetAspectRatio;
+            } else {
+                // Image is taller than target aspect ratio
+                newWidth = width;
+                newHeight = width / targetAspectRatio;
+            }
+
+            const sx = (width - newWidth) / 2;
+            const sy = (height - newHeight) / 2;
+
+            return {
+                sx,
+                sy,
+                sWidth: newWidth,
+                sHeight: newHeight,
+                width: newWidth,
+                height: newHeight
+            };
+        }
+
+        function loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.src = event.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+    </script>
+</body>
+</html>
